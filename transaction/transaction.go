@@ -1,3 +1,5 @@
+//go:generate mockgen -destination=mocks/mock_transaction.go -package=mocks github.com/TakumaKurosawa/sqlc-common-transaction/transaction Manager
+
 package transaction
 
 import (

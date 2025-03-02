@@ -1,3 +1,5 @@
+//go:generate mockgen -destination=mocks/mock_store.go -package=mocks github.com/TakumaKurosawa/sqlc-common-transaction/store/poststore Store
+
 package poststore
 
 import (
