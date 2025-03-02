@@ -7,11 +7,20 @@ import (
 	"github.com/google/uuid"
 )
 
-// Store provides post-related database operations
+// Store defines the interface for post store operations
 type Store interface {
+	// CreatePost creates a new post
 	CreatePost(ctx context.Context, userID uuid.UUID, title, content string) (model.Post, error)
+
+	// GetPost retrieves a post by ID
 	GetPost(ctx context.Context, id uuid.UUID) (model.Post, error)
+
+	// ListPostsByUser lists all posts by a user
 	ListPostsByUser(ctx context.Context, userID uuid.UUID) ([]model.Post, error)
+
+	// UpdatePost updates a post
 	UpdatePost(ctx context.Context, id uuid.UUID, title, content string) (model.Post, error)
+
+	// DeletePost deletes a post
 	DeletePost(ctx context.Context, id uuid.UUID) error
 }

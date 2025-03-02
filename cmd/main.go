@@ -4,43 +4,40 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 
-	"github.com/TakumaKurosawa/sqlc-common-transaction/store/poststore"
-	"github.com/TakumaKurosawa/sqlc-common-transaction/store/userstore"
+	"github.com/TakumaKurosawa/sqlc-common-transaction/pkg/db"
+	"github.com/TakumaKurosawa/sqlc-common-transaction/service"
+	"github.com/TakumaKurosawa/sqlc-common-transaction/store/poststore/postpgstore"
+	"github.com/TakumaKurosawa/sqlc-common-transaction/store/userstore/userpgstore"
 	"github.com/TakumaKurosawa/sqlc-common-transaction/transaction/pgxtransaction"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
-	poolConfig, err := pgxpool.ParseConfig(os.Getenv("DATABASE_URL"))
+	poolConfig, err := pgxpool.ParseConfig("postgres://postgres:postgres@localhost:5432/example")
 	if err != nil {
-		log.Fatalf("Parse database config: %v", err)
+		log.Fatalf("Unable to parse connection URL: %v", err)
 	}
 
 	pool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
 	if err != nil {
-		log.Fatalf("Create connection pool: %v", err)
+		log.Fatalf("Unable to connect to database: %v", err)
 	}
 	defer pool.Close()
 
 	txManager := pgxtransaction.New(pool)
+	queries := db.New(pool)
 
-	if err := txManager.ExecTx(context.Background(), func(userStore userstore.Store, postStore poststore.Store) error {
-		user, err := userStore.CreateUser(context.Background(), "Alice", "alice@example.com")
-		if err != nil {
-			return fmt.Errorf("create user: %w", err)
-		}
-		fmt.Printf("Created user: %v\n", user)
+	userStore := userpgstore.New(queries)
+	postStore := postpgstore.New(queries)
 
-		post, err := postStore.CreatePost(context.Background(), user.ID, "My First Post", "Hello, World!")
-		if err != nil {
-			return fmt.Errorf("create post: %w", err)
-		}
-		fmt.Printf("Created post: %v\n", post)
+	svc := service.New(txManager, userStore, postStore)
 
-		return nil
-	}); err != nil {
-		log.Fatalf("Transaction error: %v", err)
+	user, post, err := svc.CreateUserWithPost(context.Background(), "John Doe", "john@example.com", "First Post", "Hello, World!")
+	if err != nil {
+		log.Fatalf("Failed to create user with post: %v", err)
 	}
+
+	fmt.Printf("Created user: %s (%s)\n", user.Name, user.ID.String())
+	fmt.Printf("Created post: %s (%s)\n", post.Title, post.ID.String())
 }

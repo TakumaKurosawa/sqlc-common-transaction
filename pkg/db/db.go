@@ -11,21 +11,27 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
+// DBTX is an interface that both *pgxpool.Pool and pgx.Tx satisfy
 type DBTX interface {
 	Exec(context.Context, string, ...interface{}) (pgconn.CommandTag, error)
 	Query(context.Context, string, ...interface{}) (pgx.Rows, error)
 	QueryRow(context.Context, string, ...interface{}) pgx.Row
 }
 
-func New(db DBTX) *Queries {
-	return &Queries{db: db}
-}
-
+// Queries provides all the queries used in the application
 type Queries struct {
 	db DBTX
 }
 
-func (q *Queries) WithTx(tx pgx.Tx) *Queries {
+// New creates a new Queries instance with the given DBTX
+func New(db DBTX) *Queries {
+	return &Queries{
+		db: db,
+	}
+}
+
+// WithTx creates a new Queries instance with the given transaction
+func (q *Queries) WithTx(tx DBTX) *Queries {
 	return &Queries{
 		db: tx,
 	}

@@ -5,12 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/TakumaKurosawa/sqlc-common-transaction/pkg/db"
-	"github.com/TakumaKurosawa/sqlc-common-transaction/store/poststore"
-	"github.com/TakumaKurosawa/sqlc-common-transaction/store/poststore/postpgstore"
-	"github.com/TakumaKurosawa/sqlc-common-transaction/store/userstore"
-	"github.com/TakumaKurosawa/sqlc-common-transaction/store/userstore/userpgstore"
-	"github.com/TakumaKurosawa/sqlc-common-transaction/transaction"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -18,13 +12,13 @@ import (
 // pgxTxKey is a key for retrieving transaction from context
 type pgxTxKey struct{}
 
-// Manager implements transaction management using pgx
+// Manager implements the transaction.Manager interface using pgx
 type Manager struct {
 	pool *pgxpool.Pool
 }
 
-// New creates a new Manager
-func New(pool *pgxpool.Pool) transaction.Manager {
+// New creates a new Manager with the provided connection pool
+func New(pool *pgxpool.Pool) *Manager {
 	return &Manager{
 		pool: pool,
 	}
@@ -70,20 +64,15 @@ func (m *Manager) Rollback(ctx context.Context) error {
 }
 
 // ExecTx executes a function within a transaction
-func (m *Manager) ExecTx(ctx context.Context, fn func(userStore userstore.Store, postStore poststore.Store) error) error {
+func (m *Manager) ExecTx(ctx context.Context, fn func(ctx context.Context) error) error {
 	tx, err := m.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin pgx transaction: %w", err)
 	}
 
-	// The transaction context is created but unused to match interface expectations
-	_ = context.WithValue(ctx, pgxTxKey{}, tx)
+	txCtx := context.WithValue(ctx, pgxTxKey{}, tx)
 
-	q := db.New(tx)
-	userStore := m.newUserStore(q)
-	postStore := m.newPostStore(q)
-
-	if err := fn(userStore, postStore); err != nil {
+	if err := fn(txCtx); err != nil {
 		if rbErr := tx.Rollback(ctx); rbErr != nil {
 			return fmt.Errorf("tx err: %v, rb err: %v", err, rbErr)
 		}
@@ -97,39 +86,11 @@ func (m *Manager) ExecTx(ctx context.Context, fn func(userStore userstore.Store,
 	return nil
 }
 
-// WithTx executes a function using an existing transaction context
-func (m *Manager) WithTx(ctx context.Context, fn func(userStore userstore.Store, postStore poststore.Store) error) error {
-	tx, err := getPgxTx(ctx)
-	if err != nil {
-		return fmt.Errorf("get transaction: %w", err)
-	}
-
-	q := db.New(tx)
-	userStore := m.newUserStore(q)
-	postStore := m.newPostStore(q)
-
-	if err := fn(userStore, postStore); err != nil {
-		return fmt.Errorf("transaction operation failed: %w", err)
-	}
-
-	return nil
-}
-
-// getPgxTx retrieves transaction from context
+// getPgxTx extracts the pgx.Tx from context
 func getPgxTx(ctx context.Context) (pgx.Tx, error) {
 	tx, ok := ctx.Value(pgxTxKey{}).(pgx.Tx)
 	if !ok {
 		return nil, errors.New("pgx transaction not found in context")
 	}
 	return tx, nil
-}
-
-// newUserStore creates a new user store
-func (m *Manager) newUserStore(q *db.Queries) userstore.Store {
-	return userpgstore.New(q)
-}
-
-// newPostStore creates a new post store
-func (m *Manager) newPostStore(q *db.Queries) poststore.Store {
-	return postpgstore.New(q)
 }
