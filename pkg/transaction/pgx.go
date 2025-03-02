@@ -33,8 +33,7 @@ func (p *PgxManager) ExecTx(ctx context.Context, fn func(ctx context.Context) er
 
 	txCtx := context.WithValue(ctx, pgxTxKey{}, tx)
 
-	err = fn(txCtx)
-	if err != nil {
+	if err := fn(txCtx); err != nil {
 		if rbErr := tx.Rollback(ctx); rbErr != nil {
 			return fmt.Errorf("tx err: %v, rb err: %v", err, rbErr)
 		}
