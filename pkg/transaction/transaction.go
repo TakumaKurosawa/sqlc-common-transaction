@@ -31,20 +31,16 @@ func (tm *TxManager) ExecTx(ctx context.Context, fn func(ctx context.Context) er
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 
-	// Create transaction context
 	txCtx := context.WithValue(ctx, txKey{}, tx)
 
-	// Execute the function
 	err = fn(txCtx)
 	if err != nil {
-		// Rollback on error
 		if rbErr := tx.Rollback(); rbErr != nil {
 			return fmt.Errorf("tx err: %v, rb err: %v", err, rbErr)
 		}
 		return err
 	}
 
-	// Commit transaction
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit transaction: %w", err)
 	}
