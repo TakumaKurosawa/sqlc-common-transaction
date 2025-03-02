@@ -6,9 +6,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/TakumaKurosawa/sqlc-common-transaction/store"
 	"github.com/TakumaKurosawa/sqlc-common-transaction/store/poststore"
 	"github.com/TakumaKurosawa/sqlc-common-transaction/store/userstore"
+	"github.com/TakumaKurosawa/sqlc-common-transaction/transaction/pgxtransaction"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -24,10 +24,8 @@ func main() {
 	}
 	defer pool.Close()
 
-	// Create transaction manager using PostgreSQL implementation
-	txManager := store.NewTxManager(pool)
+	txManager := pgxtransaction.New(pool)
 
-	// Execute transaction across multiple tables
 	if err := txManager.ExecTx(context.Background(), func(userStore userstore.Store, postStore poststore.Store) error {
 		user, err := userStore.CreateUser(context.Background(), "Alice", "alice@example.com")
 		if err != nil {
