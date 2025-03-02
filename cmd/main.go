@@ -6,8 +6,9 @@ import (
 	"log"
 	"os"
 
+	"github.com/TakumaKurosawa/sqlc-common-transaction/pkg/db"
 	"github.com/TakumaKurosawa/sqlc-common-transaction/pkg/transaction"
-	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -23,6 +24,9 @@ func main() {
 	}
 	defer pool.Close()
 
+	// Create a query object to interact with the database
+	queries := db.New(pool)
+
 	txManager := transaction.NewPgxManager(pool)
 
 	// Example of processing within a transaction
@@ -34,20 +38,33 @@ func main() {
 			return err
 		}
 
-		var userID uuid.UUID
-		if err := tx.QueryRow(ctx,
-			"INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id",
-			"Sample User", "sample@example.com").Scan(&userID); err != nil {
+		// Use queries with transaction context
+		q := queries.WithTx(tx)
+
+		// Create user using SQLC generated function
+		user, err := q.CreateUser(ctx, db.CreateUserParams{
+			Name:  "Sample User",
+			Email: "sample@example.com",
+		})
+		if err != nil {
 			return fmt.Errorf("user creation error: %w", err)
 		}
 
-		if _, err := tx.Exec(ctx,
-			"INSERT INTO posts (user_id, title, content) VALUES ($1, $2, $3)",
-			userID, "Sample Post", "This is a sample post content."); err != nil {
+		// Convert uuid.UUID to pgtype.UUID
+		pgUserID := pgtype.UUID{}
+		pgUserID.Bytes = user.ID
+		pgUserID.Valid = true
+
+		// Create post using SQLC generated function
+		if _, err := q.CreatePost(ctx, db.CreatePostParams{
+			UserID:  pgUserID,
+			Title:   "Sample Post",
+			Content: "This is a sample post content.",
+		}); err != nil {
 			return fmt.Errorf("post creation error: %w", err)
 		}
 
-		fmt.Printf("Created user with ID %s and added a related post\n", userID)
+		fmt.Printf("Created user with ID %s and added a related post\n", user.ID)
 		return nil
 	}); err != nil {
 		log.Fatalf("Transaction execution error: %v", err)
