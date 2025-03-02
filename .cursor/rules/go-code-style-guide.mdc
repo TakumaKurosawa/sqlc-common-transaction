@@ -1,0 +1,36 @@
+---
+description: Go code style guide
+globs: 
+alwaysApply: false
+---
+
+# Go code style rule content
+
+Basically follow [uber golang style guide](mdc:https:/github.com/knsh14/uber-style-guide-ja).
+
+## Error handling
+
+When function returns only error, write error handling in one line like below.
+The purpose is narrow the variable scope.
+
+⚠️ Do not apply this rule when function returns not only error but also some value in 1st position.
+
+
+<table>
+<thead><tr><th>Bad</th><th>Good</th></tr></thead>
+<tbody>
+<tr><td>
+
+```go
+err = hoge()
+if err != nil {
+```
+
+</td><td>
+
+```go
+if err := hoge(); err != nil {
+```
+
+</td></tr>
+</tbody></table>

@@ -6,69 +6,43 @@ import (
 	"log"
 	"os"
 
-	"github.com/TakumaKurosawa/sqlc-common-transaction/pkg/db"
-	"github.com/TakumaKurosawa/sqlc-common-transaction/pkg/transaction"
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/TakumaKurosawa/sqlc-common-transaction/store"
+	"github.com/TakumaKurosawa/sqlc-common-transaction/store/poststore"
+	"github.com/TakumaKurosawa/sqlc-common-transaction/store/userstore"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		dbURL = "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+	poolConfig, err := pgxpool.ParseConfig(os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Fatalf("Parse database config: %v", err)
 	}
 
-	pool, err := pgxpool.New(context.Background(), dbURL)
+	pool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
 	if err != nil {
-		log.Fatalf("Unable to connect to database: %v", err)
+		log.Fatalf("Create connection pool: %v", err)
 	}
 	defer pool.Close()
 
-	// Create a query object to interact with the database
-	queries := db.New(pool)
+	// Create transaction manager using PostgreSQL implementation
+	txManager := store.NewTxManager(pool)
 
-	txManager := transaction.NewPgxManager(pool)
-
-	// Example of processing within a transaction
-	if err := txManager.ExecTx(context.Background(), func(ctx context.Context) error {
-		// Example: Create a user and create a post associated with that user
-
-		tx, err := transaction.GetPgxTx(ctx)
+	// Execute transaction across multiple tables
+	if err := txManager.ExecTx(context.Background(), func(userStore userstore.Store, postStore poststore.Store) error {
+		user, err := userStore.CreateUser(context.Background(), "Alice", "alice@example.com")
 		if err != nil {
-			return err
+			return fmt.Errorf("create user: %w", err)
 		}
+		fmt.Printf("Created user: %v\n", user)
 
-		// Use queries with transaction context
-		q := queries.WithTx(tx)
-
-		// Create user using SQLC generated function
-		user, err := q.CreateUser(ctx, db.CreateUserParams{
-			Name:  "Sample User",
-			Email: "sample@example.com",
-		})
+		post, err := postStore.CreatePost(context.Background(), user.ID, "My First Post", "Hello, World!")
 		if err != nil {
-			return fmt.Errorf("user creation error: %w", err)
+			return fmt.Errorf("create post: %w", err)
 		}
+		fmt.Printf("Created post: %v\n", post)
 
-		// Convert uuid.UUID to pgtype.UUID
-		pgUserID := pgtype.UUID{}
-		pgUserID.Bytes = user.ID
-		pgUserID.Valid = true
-
-		// Create post using SQLC generated function
-		if _, err := q.CreatePost(ctx, db.CreatePostParams{
-			UserID:  pgUserID,
-			Title:   "Sample Post",
-			Content: "This is a sample post content.",
-		}); err != nil {
-			return fmt.Errorf("post creation error: %w", err)
-		}
-
-		fmt.Printf("Created user with ID %s and added a related post\n", user.ID)
 		return nil
 	}); err != nil {
-		log.Fatalf("Transaction execution error: %v", err)
+		log.Fatalf("Transaction error: %v", err)
 	}
-
-	fmt.Println("Process completed successfully")
 }
